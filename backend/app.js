@@ -11,10 +11,29 @@ const sauceRoutes = require('./routes/sauce');
 const userRoutes = require('./routes/user');
 /* Importation pour accéder au path du serveur */
 const path = require('path');
-
+/* Importation pour accéder a helmet */
+const helmet = require('helmet');
+/* Importation pour accéder a express_session*/
+const session = require('express-session');
 /* Importation package body-parser pour extraction de l'objet JSON des demandes */
 const bodyParser = require('body-parser');
+/* Importation d'express-mongo-sanitize pour prévenir des injections */
+const mongoSanitize = require('express-mongo-sanitize');
+ /* Importation d'express-rate-limit et express-slow-down pour controler les répétition d'une requète et de protéger des attaques par force brute */
+const rateLimit = require("express-rate-limit");
+const slowDown = require("express-slow-down");
+/* Configuration environnement local pour protection données */
+require('dotenv').config()
+
 const app = express();
+
+/* Le middleware express-session stocke les données de session sur le serveur ; il ne sauvegarde que l’ID session dans le cookie lui-même, mais pas les données de session */
+app.use(session({
+  secret: 'keyboard cat',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: true }
+}))
 
 /* Connection a Mongoosedb */
 mongoose.connect('mongodb+srv://VCombettes:Mickey3d@cluster0.rmuvw.mongodb.net/<dbname>?retryWrites=true&w=majority',
@@ -24,6 +43,8 @@ mongoose.connect('mongodb+srv://VCombettes:Mickey3d@cluster0.rmuvw.mongodb.net/<
   .catch(() => console.log('Connexion à MongoDB échouée !'));
 
 app.use(bodyParser.json());
+app.use(mongoSanitize());
+app.use(helmet());
 
 /* Ces headers permettent :
     d'accéder à notre API depuis n'importe quelle origine ( '*' ) ;
@@ -35,6 +56,19 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   next();
 });
+
+const limiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 3,
+  message: "Trop de tentatives de connexion. Compte bloqué pour 5 minutes"
+});
+app.use(limiter);
+
+const speedLimiter = slowDown({
+  windowMs: 15 * 60 * 1000,
+  delayAfter: 100,
+});
+app.use(speedLimiter);
 
   /* Indique à Express qu'il faut gérer la ressource images de manière statique (un sous-répertoire de notre répertoire de base, __dirname ) à chaque fois qu'elle reçoit une requête vers la route /images */
   app.use('/images', express.static(path.join(__dirname, 'images')));
